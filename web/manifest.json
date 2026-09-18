@@ -1,0 +1,9 @@
+{
+  "name": "RENGSE",
+  "short_name": "RENGSE",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#161826",
+  "theme_color": "#9184D9",
+  "description": "Offline task manager"
+}
