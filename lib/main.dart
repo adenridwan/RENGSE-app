@@ -54,6 +54,8 @@ class AppTheme extends ChangeNotifier {
   Color get peachTint => _isDark ? _darkPeach : peach;
   Color get roseTint => _isDark ? _darkRose : rose;
   Color get accentTint => _isDark ? _darkAccentTint : accentDark;
+  // Accent for text/icons: lighter in dark mode so it stays readable.
+  Color get accentText => _isDark ? const Color(0xFFADA4FF) : accent;
 
   void setDark(bool value) {
     _isDark = value;
@@ -83,6 +85,7 @@ Color get surface => appTheme.surface;
 Color get line => appTheme.line;
 Color get text => appTheme.text;
 Color get muted => appTheme.muted;
+Color get accentFg => appTheme.accentText;
 
 // ==================== LOCALIZATION ====================
 
@@ -270,6 +273,29 @@ class AppLocale extends ChangeNotifier {
   String get mostProductiveList =>
       isId ? 'Daftar paling produktif' : 'Most productive list';
   String get noData => isId ? 'Tidak ada data' : 'No data';
+
+  // Incomplete tasks
+  String get incomplete => isId ? 'Tidak Terlaksana' : 'Incomplete';
+  String get incompleteTasks =>
+      isId ? 'Tugas tidak terlaksana' : 'Incomplete tasks';
+  String get markIncomplete =>
+      isId ? 'Tandai tidak terlaksana' : 'Mark as incomplete';
+  String get incompleteReason =>
+      isId ? 'Alasan tidak terlaksana' : 'Reason for incomplete';
+  String get enterReason =>
+      isId ? 'Masukkan alasan...' : 'Enter reason...';
+  String get progress => isId ? 'Progres' : 'Progress';
+  String get targetProgress =>
+      isId ? 'Progres target' : 'Target progress';
+  String get incompleteReport =>
+      isId ? 'Laporan Tidak Terlaksana' : 'Incomplete Report';
+  String get reasonLabel => isId ? 'Alasan' : 'Reason';
+  String get noReason =>
+      isId ? 'Tidak ada alasan' : 'No reason provided';
+  String get taskMarkedIncomplete =>
+      isId ? 'Tugas ditandai tidak terlaksana' : 'Task marked as incomplete';
+  String get viewIncomplete =>
+      isId ? 'Lihat tidak terlaksana' : 'View incomplete';
 
   // Task detail
   String get taskDetail => isId ? 'Detail Tugas' : 'Task Detail';
@@ -511,18 +537,23 @@ class _RengseAppState extends State<RengseApp> {
         colorScheme: isDark
             ? ColorScheme.dark(
                 primary: accent,
+                onPrimary: Colors.white,
                 secondary: const Color(0xFF00A98F),
                 surface: appTheme.surface,
                 onSurface: appTheme.text,
               )
             : ColorScheme.light(
                 primary: accent,
+                onPrimary: Colors.white,
                 secondary: const Color(0xFF00A98F),
                 surface: appTheme.surface,
                 onSurface: appTheme.text,
               ),
         fontFamily: 'sans',
         useMaterial3: true,
+        textButtonTheme: TextButtonThemeData(
+          style: TextButton.styleFrom(foregroundColor: appTheme.accentText),
+        ),
         appBarTheme: AppBarTheme(
           backgroundColor: appTheme.bg,
           foregroundColor: appTheme.text,
@@ -568,18 +599,27 @@ class Task {
     required this.due,
     this.high = false,
     this.done = false,
+    this.incomplete = false,
+    this.incompleteReason,
+    this.targetProgress = 0,
     List<Subtask>? subtasks,
     this.repeat = 'Never',
     List<String>? tags,
     DateTime? createdAt,
+    DateTime? incompleteAt,
   })  : subtasks = subtasks ?? [],
         tags = tags ?? [],
-        createdAt = createdAt ?? DateTime.now();
+        createdAt = createdAt ?? DateTime.now(),
+        incompleteAt = incompleteAt;
 
   final String id;
   String title;
   String list, due, repeat;
   bool high, done;
+  bool incomplete; // Task marked as incomplete/tidak terlaksana
+  String? incompleteReason; // Reason why task was not completed
+  int targetProgress; // Progress percentage (0-100)
+  DateTime? incompleteAt; // When task was marked incomplete
   final List<String> tags;
   final List<Subtask> subtasks;
   final DateTime createdAt;
@@ -593,6 +633,10 @@ class Task {
         'due': due,
         'high': high,
         'done': done,
+        'incomplete': incomplete,
+        'incompleteReason': incompleteReason,
+        'targetProgress': targetProgress,
+        'incompleteAt': incompleteAt?.toIso8601String(),
         'repeat': repeat,
         'tags': tags,
         'subtasks': subtasks.map((s) => s.toJson()).toList(),
@@ -612,6 +656,12 @@ class Task {
       due: (json['due'] ?? 'Hari ini').toString(),
       high: json['high'] == true,
       done: json['done'] == true,
+      incomplete: json['incomplete'] == true,
+      incompleteReason: json['incompleteReason']?.toString(),
+      targetProgress: (json['targetProgress'] as int?) ?? 0,
+      incompleteAt: json['incompleteAt'] != null
+          ? DateTime.tryParse(json['incompleteAt'].toString())
+          : null,
       repeat: (json['repeat'] ?? 'Never').toString(),
       tags: json['tags'] != null
           ? List<String>.from(
@@ -817,7 +867,7 @@ class _RengseHomeState extends State<RengseHome> with WidgetsBindingObserver {
   void _toast(String message) => ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(message),
-          backgroundColor: accentDark,
+          backgroundColor: appTheme.accentTint,
           behavior: SnackBarBehavior.floating,
         ),
       );
@@ -904,7 +954,7 @@ class _RengseHomeState extends State<RengseHome> with WidgetsBindingObserver {
         duration: const Duration(milliseconds: 180),
         padding: const EdgeInsets.symmetric(vertical: 8),
         decoration: BoxDecoration(
-            color: selected ? accentDark : Colors.transparent,
+            color: selected ? appTheme.accentTint : Colors.transparent,
             borderRadius: BorderRadius.circular(16)),
         child: Column(mainAxisSize: MainAxisSize.min, children: [
           Icon(icon, size: 20, color: selected ? accent : muted),
@@ -932,8 +982,8 @@ class _RengseHomeState extends State<RengseHome> with WidgetsBindingObserver {
                 child: Container(
                   width: 255,
                   height: 255,
-                  decoration: const BoxDecoration(
-                    color: accentDark,
+                  decoration: BoxDecoration(
+                    color: appTheme.accentTint,
                     shape: BoxShape.circle,
                   ),
                 ),
@@ -1077,7 +1127,7 @@ class _RengseHomeState extends State<RengseHome> with WidgetsBindingObserver {
                       shape: BoxShape.circle,
                     ),
                     child:
-                        const Icon(Icons.lock_rounded, color: accent, size: 64),
+                        Icon(Icons.lock_rounded, color: accentFg, size: 64),
                   ),
                   const SizedBox(height: 32),
                   Text(
@@ -1205,9 +1255,18 @@ class _RengseHomeState extends State<RengseHome> with WidgetsBindingObserver {
   void _showReport() {
     final total = tasks.length;
     final done = tasks.where((t) => t.done).length;
+    final incompleteCount = tasks.where((t) => t.incomplete).length;
     final rate = total > 0 ? (done / total * 100).toInt() : 0;
     final highPriority = tasks.where((t) => t.high).length;
     final highDone = tasks.where((t) => t.high && t.done).length;
+
+    // Calculate average progress of incomplete tasks
+    final incompleteTasks = tasks.where((t) => t.incomplete).toList();
+    final avgProgress = incompleteTasks.isNotEmpty
+        ? (incompleteTasks.map((t) => t.targetProgress).reduce((a, b) => a + b) /
+                incompleteTasks.length)
+            .toInt()
+        : 0;
 
     // Find most productive list
     final listCounts = <String, int>{};
@@ -1256,8 +1315,8 @@ class _RengseHomeState extends State<RengseHome> with WidgetsBindingObserver {
                       color: appTheme.accentTint,
                       borderRadius: BorderRadius.circular(12),
                     ),
-                    child: const Icon(Icons.bar_chart_rounded,
-                        color: accent, size: 22),
+                    child: Icon(Icons.bar_chart_rounded,
+                        color: accentFg, size: 22),
                   ),
                   const SizedBox(width: 12),
                   Text(
@@ -1278,7 +1337,28 @@ class _RengseHomeState extends State<RengseHome> with WidgetsBindingObserver {
                   '$highDone / $highPriority'),
               _reportRow(Icons.folder_outlined, t.mostProductiveList,
                   topList ?? t.noData),
+              _reportRow(Icons.cancel_outlined, t.incompleteTasks,
+                  '$incompleteCount (${avgProgress}% ${t.progress.toLowerCase()})'),
               const SizedBox(height: 16),
+              if (incompleteCount > 0) ...[
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: () {
+                      Navigator.pop(context);
+                      _showIncompleteReport();
+                    },
+                    icon: const Icon(Icons.list_alt_rounded, size: 18),
+                    label: Text(t.viewIncomplete),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.orange,
+                      side: const BorderSide(color: Colors.orange),
+                      padding: const EdgeInsets.all(12),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 10),
+              ],
               SizedBox(
                 width: double.infinity,
                 child: FilledButton(
@@ -1294,6 +1374,258 @@ class _RengseHomeState extends State<RengseHome> with WidgetsBindingObserver {
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  void _showIncompleteReport() {
+    final incompleteTasks = tasks.where((t) => t.incomplete).toList();
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: surface,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (context) => DraggableScrollableSheet(
+        initialChildSize: 0.7,
+        minChildSize: 0.4,
+        maxChildSize: 0.9,
+        expand: false,
+        builder: (context, scrollController) => SafeArea(
+          child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(24, 16, 24, 0),
+                child: Column(
+                  children: [
+                    Center(
+                      child: Container(
+                        width: 40,
+                        height: 4,
+                        decoration: BoxDecoration(
+                          color: line,
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: appTheme.roseTint,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: const Icon(Icons.cancel_outlined,
+                              color: Colors.redAccent, size: 22),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                t.incompleteReport,
+                                style: TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.w700,
+                                  color: text,
+                                ),
+                              ),
+                              Text(
+                                '${incompleteTasks.length} ${t.tasks}',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: muted,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+              Expanded(
+                child: incompleteTasks.isEmpty
+                    ? Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.check_circle_outline,
+                                size: 48, color: muted),
+                            const SizedBox(height: 12),
+                            Text(t.noData, style: TextStyle(color: muted)),
+                          ],
+                        ),
+                      )
+                    : ListView.builder(
+                        controller: scrollController,
+                        padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                        itemCount: incompleteTasks.length,
+                        itemBuilder: (context, index) {
+                          final task = incompleteTasks[index];
+                          return _incompleteTaskCard(task);
+                        },
+                      ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(24, 8, 24, 16),
+                child: SizedBox(
+                  width: double.infinity,
+                  child: FilledButton(
+                    onPressed: () => Navigator.pop(context),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: accent,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.all(14),
+                    ),
+                    child: Text(t.close),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _incompleteTaskCard(Task task) {
+    final dateStr = task.incompleteAt != null
+        ? '${task.incompleteAt!.day}/${task.incompleteAt!.month}/${task.incompleteAt!.year}'
+        : '-';
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: line),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  task.title,
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                    color: text,
+                  ),
+                ),
+              ),
+              if (task.high)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: appTheme.peachTint,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(Icons.flag, size: 14, color: Colors.orange),
+                ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Icon(Icons.folder_outlined, size: 14, color: muted),
+              const SizedBox(width: 4),
+              Text(task.list, style: TextStyle(fontSize: 12, color: muted)),
+              const SizedBox(width: 12),
+              Icon(Icons.calendar_today_outlined, size: 14, color: muted),
+              const SizedBox(width: 4),
+              Text(dateStr, style: TextStyle(fontSize: 12, color: muted)),
+            ],
+          ),
+          const SizedBox(height: 12),
+          // Progress bar
+          Row(
+            children: [
+              Text('${t.progress}:', style: TextStyle(fontSize: 12, color: muted)),
+              const SizedBox(width: 8),
+              Expanded(
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(4),
+                  child: LinearProgressIndicator(
+                    value: task.targetProgress / 100,
+                    backgroundColor: line,
+                    valueColor: AlwaysStoppedAnimation(
+                      task.targetProgress >= 70
+                          ? Colors.green
+                          : task.targetProgress >= 40
+                              ? Colors.orange
+                              : Colors.redAccent,
+                    ),
+                    minHeight: 8,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                '${task.targetProgress}%',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: text,
+                ),
+              ),
+            ],
+          ),
+          if (task.incompleteReason != null &&
+              task.incompleteReason!.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: appTheme.roseTint,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '${t.reasonLabel}:',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: muted,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    task.incompleteReason!,
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: text,
+                      height: 1.4,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ] else ...[
+            const SizedBox(height: 8),
+            Text(
+              t.noReason,
+              style: TextStyle(
+                fontSize: 12,
+                fontStyle: FontStyle.italic,
+                color: muted,
+              ),
+            ),
+          ],
+        ],
       ),
     );
   }
@@ -1438,9 +1770,9 @@ class _RengseHomeState extends State<RengseHome> with WidgetsBindingObserver {
       );
 
   Color _taskTint(Task task) {
-    if (task.done) return mint;
-    if (task.high) return peach;
-    const options = [sky, accentDark, rose, mint];
+    if (task.done) return appTheme.mintTint;
+    if (task.high) return appTheme.peachTint;
+    final options = [appTheme.skyTint, appTheme.accentTint, appTheme.roseTint, appTheme.mintTint];
     return options[
         task.list.codeUnits.fold(0, (a, b) => a + b) % options.length];
   }
@@ -1579,7 +1911,7 @@ class _RengseHomeState extends State<RengseHome> with WidgetsBindingObserver {
             );
           }),
         const SizedBox(height: 18),
-        const Text('Tampilan pintar', style: TextStyle(color: accent)),
+        Text('Tampilan pintar', style: TextStyle(color: accentFg)),
         const SizedBox(height: 8),
         _smartView(Icons.upcoming_rounded, '7 hari ke depan',
             '${tasks.where((t) => !t.done).length} tugas aktif'),
@@ -1592,9 +1924,9 @@ class _RengseHomeState extends State<RengseHome> with WidgetsBindingObserver {
   }
 
   Color _smartTint(String title) {
-    if (title.startsWith('7')) return sky;
-    if (title.startsWith('Prioritas')) return peach;
-    return mint;
+    if (title.startsWith('7')) return appTheme.skyTint;
+    if (title.startsWith('Prioritas')) return appTheme.peachTint;
+    return appTheme.mintTint;
   }
 
   Widget _smartView(IconData icon, String title, String subtitle) => Container(
@@ -1608,7 +1940,7 @@ class _RengseHomeState extends State<RengseHome> with WidgetsBindingObserver {
               height: 38,
               decoration: BoxDecoration(
                   color: surface, borderRadius: BorderRadius.circular(11)),
-              child: Icon(icon, color: accent, size: 20)),
+              child: Icon(icon, color: accentFg, size: 20)),
           title:
               Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
           subtitle:
@@ -1622,7 +1954,7 @@ class _RengseHomeState extends State<RengseHome> with WidgetsBindingObserver {
         shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(18),
             side: BorderSide(color: line)),
-        color: sky,
+        color: appTheme.skyTint,
         child: InkWell(
           onTap: _search,
           borderRadius: BorderRadius.circular(18),
@@ -1639,7 +1971,7 @@ class _RengseHomeState extends State<RengseHome> with WidgetsBindingObserver {
                           color: surface,
                           borderRadius: BorderRadius.circular(13)),
                       child:
-                          const Icon(Icons.folder_copy_rounded, color: accent)),
+                          Icon(Icons.folder_copy_rounded, color: accentFg)),
                   const SizedBox(width: 12),
                   Expanded(
                       child: Text(name,
@@ -1769,7 +2101,7 @@ class _RengseHomeState extends State<RengseHome> with WidgetsBindingObserver {
                           color: isSelected
                               ? Colors.white70
                               : isToday
-                                  ? accent
+                                  ? accentFg
                                   : muted,
                         ),
                       ),
@@ -1782,7 +2114,7 @@ class _RengseHomeState extends State<RengseHome> with WidgetsBindingObserver {
                           color: isSelected
                               ? Colors.white
                               : isToday
-                                  ? accent
+                                  ? accentFg
                                   : text,
                         ),
                       ),
@@ -1878,8 +2210,8 @@ class _RengseHomeState extends State<RengseHome> with WidgetsBindingObserver {
           if (pendingTasks.isNotEmpty) ...[
             Text(
               'Tertunda · ${pendingTasks.length}',
-              style: const TextStyle(
-                color: accent,
+              style: TextStyle(
+                color: accentFg,
                 fontSize: 13,
                 fontWeight: FontWeight.w600,
               ),
@@ -2012,7 +2344,7 @@ class _RengseHomeState extends State<RengseHome> with WidgetsBindingObserver {
       builder: (context, child) {
         return Theme(
           data: Theme.of(context).copyWith(
-            colorScheme: ColorScheme.light(
+            colorScheme: Theme.of(context).colorScheme.copyWith(
               primary: accent,
               onPrimary: Colors.white,
               surface: surface,
@@ -2096,7 +2428,7 @@ class _RengseHomeState extends State<RengseHome> with WidgetsBindingObserver {
                 label: const Text('Prioritas tinggi'),
                 selected: isHigh,
                 onSelected: (v) => setModalState(() => isHigh = v),
-                selectedColor: accentDark,
+                selectedColor: appTheme.accentTint,
                 avatar: Icon(
                   Icons.flag,
                   color: isHigh ? Colors.orange : muted,
@@ -2237,9 +2569,9 @@ class _RengseHomeState extends State<RengseHome> with WidgetsBindingObserver {
             height: 278,
             padding: const EdgeInsets.all(18),
             decoration: BoxDecoration(
-              color: accentDark,
+              color: appTheme.accentTint,
               shape: BoxShape.circle,
-              border: Border.all(color: const Color(0xFFD9D5FF), width: 8),
+              border: Border.all(color: appTheme.isDark ? line : const Color(0xFFD9D5FF), width: 8),
             ),
             child: Stack(
               alignment: Alignment.center,
@@ -2252,7 +2584,7 @@ class _RengseHomeState extends State<RengseHome> with WidgetsBindingObserver {
                     strokeWidth: 10,
                     strokeCap: StrokeCap.round,
                     color: accent,
-                    backgroundColor: Colors.white,
+                    backgroundColor: line,
                   ),
                 ),
                 Column(
@@ -2319,12 +2651,12 @@ class _RengseHomeState extends State<RengseHome> with WidgetsBindingObserver {
         const SizedBox(height: 10),
         Row(
           children: [
-            _focusMetric('$completed', 'selesai', mint, Icons.check_rounded),
+            _focusMetric('$completed', 'selesai', appTheme.mintTint, Icons.check_rounded),
             const SizedBox(width: 8),
             _focusMetric(
-                '$remaining', 'tertunda', sky, Icons.timelapse_rounded),
+                '$remaining', 'tertunda', appTheme.skyTint, Icons.timelapse_rounded),
             const SizedBox(width: 8),
-            _focusMetric('$priorities', 'prioritas', peach, Icons.flag_rounded),
+            _focusMetric('$priorities', 'prioritas', appTheme.peachTint, Icons.flag_rounded),
           ],
         ),
         const SizedBox(height: 20),
@@ -2386,7 +2718,8 @@ class _RengseHomeState extends State<RengseHome> with WidgetsBindingObserver {
   Widget _insights() {
     final total = tasks.length;
     final done = tasks.where((t) => t.done).length;
-    final pending = total - done;
+    final incompleteCount = tasks.where((t) => t.incomplete).length;
+    final pending = total - done - incompleteCount;
     final high = tasks.where((t) => t.high).length;
     final highDone = tasks.where((t) => t.high && t.done).length;
     final rate = total > 0 ? (done / total * 100).toInt() : 0;
@@ -2475,12 +2808,18 @@ class _RengseHomeState extends State<RengseHome> with WidgetsBindingObserver {
         Row(
           children: [
             _insightMetric(
-                '$done', 'selesai', mint, Icons.check_circle_rounded),
+                '$done', t.completed.toLowerCase(), appTheme.mintTint, Icons.check_circle_rounded),
             const SizedBox(width: 9),
             _insightMetric(
-                '$pending', 'tertunda', sky, Icons.hourglass_bottom_rounded),
+                '$pending', t.pendingLower, appTheme.skyTint, Icons.hourglass_bottom_rounded),
+          ],
+        ),
+        const SizedBox(height: 9),
+        Row(
+          children: [
+            _insightMetric('$high', t.priorityLower, appTheme.peachTint, Icons.flag_rounded),
             const SizedBox(width: 9),
-            _insightMetric('$high', 'prioritas', peach, Icons.flag_rounded),
+            _insightMetric('$incompleteCount', t.incomplete.toLowerCase(), appTheme.roseTint, Icons.cancel_outlined),
           ],
         ),
         const SizedBox(height: 24),
@@ -2496,7 +2835,7 @@ class _RengseHomeState extends State<RengseHome> with WidgetsBindingObserver {
             children: [
               Row(
                 children: [
-                  const Icon(Icons.bar_chart_rounded, color: accent, size: 20),
+                  Icon(Icons.bar_chart_rounded, color: accentFg, size: 20),
                   const SizedBox(width: 8),
                   const Text('Sebaran tugas',
                       style:
@@ -2530,7 +2869,7 @@ class _RengseHomeState extends State<RengseHome> with WidgetsBindingObserver {
         Container(
           padding: const EdgeInsets.all(18),
           decoration: BoxDecoration(
-            color: high > 0 ? peach : mint,
+            color: high > 0 ? appTheme.peachTint : appTheme.mintTint,
             borderRadius: BorderRadius.circular(20),
           ),
           child: Row(
@@ -2539,7 +2878,7 @@ class _RengseHomeState extends State<RengseHome> with WidgetsBindingObserver {
               Container(
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: .72),
+                    color: surface.withValues(alpha: .72),
                     borderRadius: BorderRadius.circular(13)),
                 child: Icon(
                     high > 0 ? Icons.bolt_rounded : Icons.rocket_launch_rounded,
@@ -2573,6 +2912,55 @@ class _RengseHomeState extends State<RengseHome> with WidgetsBindingObserver {
             ],
           ),
         ),
+        // Incomplete tasks section
+        if (incompleteCount > 0) ...[
+          const SizedBox(height: 16),
+          GestureDetector(
+            onTap: _showIncompleteReport,
+            child: Container(
+              padding: const EdgeInsets.all(18),
+              decoration: BoxDecoration(
+                color: appTheme.roseTint,
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(
+                    color: Colors.redAccent.withValues(alpha: 0.2)),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                        color: surface.withValues(alpha: .72),
+                        borderRadius: BorderRadius.circular(13)),
+                    child: const Icon(Icons.cancel_outlined,
+                        color: Colors.redAccent),
+                  ),
+                  const SizedBox(width: 13),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(t.incompleteTasks,
+                            style:
+                                const TextStyle(fontWeight: FontWeight.w800)),
+                        const SizedBox(height: 4),
+                        Text(
+                          t.isId
+                              ? '$incompleteCount tugas tidak terlaksana. Ketuk untuk melihat alasan dan progres.'
+                              : '$incompleteCount incomplete tasks. Tap to view reasons and progress.',
+                          style: TextStyle(
+                              color: muted, fontSize: 12, height: 1.35),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const Icon(Icons.chevron_right, color: Colors.redAccent),
+                ],
+              ),
+            ),
+          ),
+        ],
       ],
     );
   }
@@ -2697,7 +3085,7 @@ class _RengseHomeState extends State<RengseHome> with WidgetsBindingObserver {
                     borderRadius: BorderRadius.circular(12),
                   ),
                   filled: true,
-                  fillColor: const Color(0xFFFBFCFF),
+                  fillColor: appTheme.isDark ? surface : const Color(0xFFFBFCFF),
                 ),
               ),
               const SizedBox(height: 12),
@@ -2713,7 +3101,7 @@ class _RengseHomeState extends State<RengseHome> with WidgetsBindingObserver {
                           borderRadius: BorderRadius.circular(12),
                         ),
                         filled: true,
-                        fillColor: const Color(0xFFFBFCFF),
+                        fillColor: appTheme.isDark ? surface : const Color(0xFFFBFCFF),
                       ),
                     ),
                   ),
@@ -2745,7 +3133,7 @@ class _RengseHomeState extends State<RengseHome> with WidgetsBindingObserver {
                     label: const Text('Prioritas tinggi'),
                     selected: isHigh,
                     onSelected: (v) => setModalState(() => isHigh = v),
-                    selectedColor: accentDark,
+                    selectedColor: appTheme.accentTint,
                     avatar: Icon(
                       Icons.flag,
                       color: isHigh ? Colors.orange : muted,
@@ -2901,9 +3289,9 @@ class _TaskDetailPageState extends State<TaskDetailPage> {
     widget.onUpdate(task);
     setState(() => isEditing = false);
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Tugas diperbarui'),
-        backgroundColor: accentDark,
+      SnackBar(
+        content: const Text('Tugas diperbarui'),
+        backgroundColor: accent,
         behavior: SnackBarBehavior.floating,
       ),
     );
@@ -2918,7 +3306,7 @@ class _TaskDetailPageState extends State<TaskDetailPage> {
             if (isEditing)
               IconButton(
                 onPressed: _saveChanges,
-                icon: const Icon(Icons.check, color: accent),
+                icon: Icon(Icons.check, color: accentFg),
               )
             else
               IconButton(
@@ -3051,7 +3439,7 @@ class _TaskDetailPageState extends State<TaskDetailPage> {
               const SizedBox(height: 20),
               Text(
                 'Subtugas · ${task.subDone} dari ${task.subtasks.length}',
-                style: const TextStyle(color: accent),
+                style: TextStyle(color: accentFg),
               ),
               const SizedBox(height: 8),
               ...List.generate(
@@ -3089,27 +3477,136 @@ class _TaskDetailPageState extends State<TaskDetailPage> {
               ),
             ],
             const SizedBox(height: 24),
-            FilledButton(
-              onPressed: () {
-                widget.onToggle(task);
-                Navigator.pop(context, 'updated');
-              },
-              style: FilledButton.styleFrom(
-                backgroundColor: task.done ? accentDark : accent,
-                foregroundColor: task.done ? text : Colors.white,
-                padding: const EdgeInsets.all(16),
-                shape: RoundedRectangleBorder(
+            // Show incomplete status if already marked
+            if (task.incomplete) ...[
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(14),
+                margin: const EdgeInsets.only(bottom: 12),
+                decoration: BoxDecoration(
+                  color: appTheme.roseTint,
                   borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.redAccent.withValues(alpha: 0.3)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(Icons.cancel_outlined,
+                            color: Colors.redAccent, size: 18),
+                        const SizedBox(width: 8),
+                        Text(
+                          t.incomplete,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w600,
+                            color: Colors.redAccent,
+                          ),
+                        ),
+                        const Spacer(),
+                        Text(
+                          '${task.targetProgress}%',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w700,
+                            color: text,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(4),
+                      child: LinearProgressIndicator(
+                        value: task.targetProgress / 100,
+                        backgroundColor: line,
+                        valueColor: AlwaysStoppedAnimation(
+                          task.targetProgress >= 70
+                              ? Colors.green
+                              : task.targetProgress >= 40
+                                  ? Colors.orange
+                                  : Colors.redAccent,
+                        ),
+                        minHeight: 6,
+                      ),
+                    ),
+                    if (task.incompleteReason != null &&
+                        task.incompleteReason!.isNotEmpty) ...[
+                      const SizedBox(height: 10),
+                      Text(
+                        '${t.reasonLabel}: ${task.incompleteReason}',
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: muted,
+                          height: 1.4,
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
               ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(task.done ? Icons.replay : Icons.check_circle),
-                  const SizedBox(width: 8),
-                  Text(task.done ? 'Buka lagi tugas' : 'Tandai selesai'),
+            ],
+            Row(
+              children: [
+                Expanded(
+                  child: FilledButton(
+                    onPressed: () {
+                      widget.onToggle(task);
+                      Navigator.pop(context, 'updated');
+                    },
+                    style: FilledButton.styleFrom(
+                      backgroundColor: task.done ? appTheme.accentTint : accent,
+                      foregroundColor: task.done ? text : Colors.white,
+                      padding: const EdgeInsets.all(16),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(task.done ? Icons.replay : Icons.check_circle,
+                            size: 20),
+                        const SizedBox(width: 6),
+                        Flexible(
+                          child: Text(
+                            task.done ? t.reopenTask : t.markComplete,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                if (!task.done && !task.incomplete) ...[
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: _markIncomplete,
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.orange,
+                        side: const BorderSide(color: Colors.orange),
+                        padding: const EdgeInsets.all(16),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Icon(Icons.cancel_outlined, size: 20),
+                          const SizedBox(width: 6),
+                          Flexible(
+                            child: Text(
+                              t.incomplete,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
                 ],
-              ),
+              ],
             ),
           ],
         ),
@@ -3164,7 +3661,7 @@ class _TaskDetailPageState extends State<TaskDetailPage> {
               leading: const Icon(Icons.calendar_today_outlined),
               title: Text(opt),
               trailing: task.due == opt
-                  ? const Icon(Icons.check, color: accent)
+                  ? Icon(Icons.check, color: accentFg)
                   : null,
               onTap: () => Navigator.pop(context, opt),
             ),
@@ -3213,6 +3710,205 @@ class _TaskDetailPageState extends State<TaskDetailPage> {
     if (saved == true && controller.text.trim().isNotEmpty) {
       setState(() => task.subtasks.add(Subtask(controller.text.trim())));
       widget.onUpdate(task);
+    }
+  }
+
+  Future<void> _markIncomplete() async {
+    final reasonController = TextEditingController();
+    int progress = 0;
+
+    final result = await showModalBottomSheet<Map<String, dynamic>>(
+      context: context,
+      backgroundColor: surface,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (context) => StatefulBuilder(
+        builder: (context, setModalState) => Padding(
+          padding: EdgeInsets.fromLTRB(
+              24, 16, 24, MediaQuery.of(context).viewInsets.bottom + 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: line,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: appTheme.roseTint,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: const Icon(Icons.cancel_outlined,
+                        color: Colors.redAccent, size: 22),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          t.markIncomplete,
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w700,
+                            color: text,
+                          ),
+                        ),
+                        Text(
+                          task.title,
+                          style: TextStyle(fontSize: 12, color: muted),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 20),
+              // Progress slider
+              Text(
+                '${t.targetProgress}: $progress%',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: text,
+                ),
+              ),
+              const SizedBox(height: 8),
+              SliderTheme(
+                data: SliderTheme.of(context).copyWith(
+                  activeTrackColor: progress >= 70
+                      ? Colors.green
+                      : progress >= 40
+                          ? Colors.orange
+                          : Colors.redAccent,
+                  thumbColor: progress >= 70
+                      ? Colors.green
+                      : progress >= 40
+                          ? Colors.orange
+                          : Colors.redAccent,
+                  inactiveTrackColor: line,
+                  overlayColor: (progress >= 70
+                          ? Colors.green
+                          : progress >= 40
+                              ? Colors.orange
+                              : Colors.redAccent)
+                      .withValues(alpha: 0.2),
+                ),
+                child: Slider(
+                  value: progress.toDouble(),
+                  min: 0,
+                  max: 100,
+                  divisions: 20,
+                  label: '$progress%',
+                  onChanged: (value) {
+                    setModalState(() => progress = value.toInt());
+                  },
+                ),
+              ),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text('0%', style: TextStyle(fontSize: 11, color: muted)),
+                  Text('50%', style: TextStyle(fontSize: 11, color: muted)),
+                  Text('100%', style: TextStyle(fontSize: 11, color: muted)),
+                ],
+              ),
+              const SizedBox(height: 16),
+              // Reason input
+              Text(
+                t.incompleteReason,
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: text,
+                ),
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: reasonController,
+                maxLines: 3,
+                textCapitalization: TextCapitalization.sentences,
+                decoration: InputDecoration(
+                  hintText: t.enterReason,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  filled: true,
+                  fillColor: bg,
+                ),
+              ),
+              const SizedBox(height: 20),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () => Navigator.pop(context),
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.all(14),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      child: Text(t.cancel),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: FilledButton(
+                      onPressed: () => Navigator.pop(context, {
+                        'progress': progress,
+                        'reason': reasonController.text.trim(),
+                      }),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: Colors.orange,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.all(14),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      child: Text(t.markIncomplete),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    if (result != null) {
+      setState(() {
+        task.incomplete = true;
+        task.targetProgress = result['progress'] as int;
+        task.incompleteReason = result['reason'] as String?;
+        task.incompleteAt = DateTime.now();
+      });
+      widget.onUpdate(task);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(t.taskMarkedIncomplete),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      }
     }
   }
 }
@@ -3409,7 +4105,7 @@ class _SettingsPageState extends State<SettingsPage> {
               padding: const EdgeInsets.all(20),
               children: [
                 // Account section
-                Text(t.account, style: TextStyle(color: accent)),
+                Text(t.account, style: TextStyle(color: accentFg)),
                 const SizedBox(height: 8),
                 Container(
                   padding: const EdgeInsets.all(16),
@@ -3427,7 +4123,7 @@ class _SettingsPageState extends State<SettingsPage> {
                           color: appTheme.accentTint,
                           borderRadius: BorderRadius.circular(14),
                         ),
-                        child: const Icon(Icons.person_outline, color: accent),
+                        child: Icon(Icons.person_outline, color: accentFg),
                       ),
                       const SizedBox(width: 14),
                       Expanded(
@@ -3450,7 +4146,7 @@ class _SettingsPageState extends State<SettingsPage> {
                 const SizedBox(height: 24),
 
                 // Preferences section
-                Text(t.preferences, style: TextStyle(color: accent)),
+                Text(t.preferences, style: TextStyle(color: accentFg)),
                 const SizedBox(height: 8),
                 _settingsTile(
                   icon: Icons.sync_rounded,
@@ -3541,7 +4237,7 @@ class _SettingsPageState extends State<SettingsPage> {
                 const SizedBox(height: 24),
 
                 // Appearance section
-                Text(t.appearance, style: TextStyle(color: accent)),
+                Text(t.appearance, style: TextStyle(color: accentFg)),
                 const SizedBox(height: 8),
                 _settingsTile(
                   icon: isDark
@@ -3571,7 +4267,7 @@ class _SettingsPageState extends State<SettingsPage> {
                 const SizedBox(height: 24),
 
                 // Data section
-                Text(t.data, style: TextStyle(color: accent)),
+                Text(t.data, style: TextStyle(color: accentFg)),
                 const SizedBox(height: 8),
                 _settingsTile(
                   icon: Icons.download_rounded,
@@ -3750,7 +4446,7 @@ class _SettingsPageState extends State<SettingsPage> {
               leading: const Text('🇮🇩', style: TextStyle(fontSize: 24)),
               title: const Text('Bahasa Indonesia'),
               trailing: language == 'id'
-                  ? const Icon(Icons.check, color: accent)
+                  ? Icon(Icons.check, color: accentFg)
                   : null,
               onTap: () => Navigator.pop(c, 'id'),
             ),
@@ -3758,7 +4454,7 @@ class _SettingsPageState extends State<SettingsPage> {
               leading: const Text('🇺🇸', style: TextStyle(fontSize: 24)),
               title: const Text('English'),
               trailing: language == 'en'
-                  ? const Icon(Icons.check, color: accent)
+                  ? Icon(Icons.check, color: accentFg)
                   : null,
               onTap: () => Navigator.pop(c, 'en'),
             ),

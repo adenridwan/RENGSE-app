@@ -49,3 +49,6 @@ app.*.map.json
 
 # Claude Code
 .claude/
+
+# Built APKs copied to project root
+*.apk
